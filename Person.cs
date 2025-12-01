@@ -19,6 +19,7 @@ namespace FamilyTree
 		public int Generation {  get; set; }
 		public void ClearDuplicates(List<Person> list)
 		{
+			Main main = GetParent<Main>();
 			Dictionary<Person, int> repeats = new Dictionary<Person, int>();
 			foreach (Person p in list)
 			{
@@ -36,23 +37,49 @@ namespace FamilyTree
 			}
 			foreach (var id in repeats.Keys)
 			{
-				list.RemoveAll(p => p.model.Id == id.model.Id);
-				list.Add(id);
+				if (repeats[id] > 1)
+				{
+					list.RemoveAll(p => p.model.Id == id.model.Id);
+					list.Add(id);
+					List<Person> people = main.GetChildren().OfType<Person>().ToList();
+					foreach (var ondel in people)
+					{
+						if (ondel.model.Id == id.model.Id)
+						{
+							main.RemoveChild(ondel);
+						}
+					}
+					main.AddChild(id);
+				}
 			}
+		}
+		public void OnHover()
+		{
+			if (GetSiblings().Count > 0)
+			Modulate = Color.FromHtml("#1298af");
+		}
+		public void OnLeft()
+		{
+			Modulate = Colors.White;
 		}
 		public List<Person> GetAncestors(int generation)
 		{
+			Main main = GetParent<Main>();
 			List<Person> ancestors = new List<Person>();
 			Person father = model.Father;
 			Person mother = model.Mother;
 			if (father != null)
 			{
 				father.Generation = Generation + 1;
+				father = main.InitPerson(father.model);
+				father.Position = new Vector2(Position.X + (mother != null?320*generation - 100 *(generation +3): 0), Position.Y - 300);
 				ancestors.Add(father);
 			}
 			if (mother != null)
 			{
-				mother .Generation = Generation + 1;
+				mother.Generation = Generation + 1;
+				mother = main.InitPerson(mother.model);
+				mother.Position = new Vector2(Position.X - (father != null?320*generation - 100 *(generation+3): 0), Position.Y - 300);
 				ancestors.Add(mother);
 			}
 			if (generation > 1)
@@ -89,59 +116,157 @@ namespace FamilyTree
 		{
 			return model.Children;
 		}
-		//todo
-		public List<Person> GetFamily(int ancestorsDepth, int descendantsDepth)
-{
-	List<Person> family = new List<Person>();
-	
-	// Добавляем самого человека
-	this.Generation = 0;
-	family.Add(this);
-	
-	// Получаем предков
-	if (ancestorsDepth > 0)
-	{
-		var ancestors = GetAncestors(ancestorsDepth);
-		family.AddRange(ancestors);
-	}
-	
-	// Получаем потомков
-	if (descendantsDepth > 0)
-	{
-		var descendants = GetDescendants(descendantsDepth);
-		family.AddRange(descendants);
-	}
-	
-	ClearDuplicates(family);
-	return family;
-}
-
-private List<Person> GetDescendants(int depth)
-{
-	List<Person> descendants = new List<Person>();
-	
-	if (depth <= 0) return descendants;
-	
-	foreach (var child in model.Children)
-	{
-		child.Generation = -1; // Первое поколение потомков
-		descendants.Add(child);
-		
-		if (depth > 1)
+		public List <Person> GetSpouses() 
 		{
-			var grandChildren = child.GetDescendants(depth - 1);
-			foreach (var gc in grandChildren)
-			{
-				gc.Generation = -2; // Второе поколение потомков и т.д.
-			}
-			descendants.AddRange(grandChildren);
+			return model.Spouses;
 		}
-	}
+		public Person GetLastSpouse()
+		{
+			return model.Spouse;
+		}
+		//метод - нейронная дристня, но пока оставлю
+		public List<Person> GetFamily(int ancestorsDepth, int descendantsDepth)
+		{
+			List<Person> family = new List<Person>();
 	
-	return descendants;
-}
+			// Добавляем самого человека
+			this.Generation = 0;
+			family.Add(this);
+	
+			// Получаем предков
+			if (ancestorsDepth > 0)
+			{
+				var ancestors = GetAncestors(ancestorsDepth);
+				family.AddRange(ancestors);
+			}
+	
+			// Получаем потомков
+			if (descendantsDepth > 0)
+			{
+				var descendants = GetDescendants(descendantsDepth);
+				family.AddRange(descendants);
+			}
+	
+			ClearDuplicates(family);
+			return family;
+		}
+		public List<Person> GetFamilyNormal(int generation, int siblings_generation)
+		{
+			List<Person> ancestors = GetAncestors(generation);
+			List<Person> family = new List<Person>();
+			family.AddRange(ancestors);
+			List<Person> parents = GetOneGenerationAncestors(siblings_generation);
+			List<Person> children = new List<Person>();
+			bool has_children = true;
+			int current_generation = siblings_generation - 1;
+			while (has_children)
+			{
+				foreach (Person p in parents)
+				{
+					List<Person> ones_children = p.GetChildren();
+					foreach (Person p2 in ones_children)
+					{
+						p2.Generation = current_generation;
+					}
+					children.AddRange(ones_children);
+				}
+				if (children.Count == 0)
+					has_children = false;
+				else
+				{
+					family.AddRange(children);
+					parents = new List<Person>();
+					parents.AddRange(children);
+					children = new List<Person>();
+					current_generation--;
+				}
+			}
+			ClearDuplicates(family);
+			return family;
+		}
+		public List<Person> GetSiblings()
+		{
+			//List<Person> siblings = new List<Person>();
+			//List<Person> father_children = model.Father != null?model.Father.GetChildren():new List<Person>();
+			//List<Person> mother_children = model.Mother != null ? model.Mother.GetChildren() : new List<Person>();
+			//foreach (Person child in father_children)
+			//{
+			//	if (mother_children.Find(p => p.model.Id == child.model.Id) != null && child.model.Id != model.Id)
+			//	{
+			//		siblings.Add(child);
+			//	}
+			//}
+			//return siblings;
+
+
+			//HashSet<Person> siblings = new HashSet<Person>();
+			List<Person> siblings = new List<Person>();
+			if (model.Father != null)
+			{
+				foreach (Person child in model.Father.GetChildren())
+				{
+					if (child.model.Id != model.Id)
+					{
+						siblings.Add(child);
+					}
+				}
+			}
+			if (model.Mother != null)
+			{
+				foreach (Person child in model.Mother.GetChildren())
+				{
+					if (child.model.Id != model.Id) 
+					{
+						siblings.Add(child);
+					}
+				}
+			}
+
+			return siblings.ToList();
+		}
+
+		private List<Person> GetDescendants(int depth)
+		{
+			List<Person> descendants = new List<Person>();
+	
+			if (depth <= 0) return descendants;
+	
+			foreach (var child in model.Children)
+			{
+				child.Generation = Generation - 1; // Первое поколение потомков
+				descendants.Add(child);
+				if (depth > 1)
+				{
+					var grandChildren = child.GetDescendants(depth - 1);
+					descendants.AddRange(grandChildren);
+				}
+			}
+			return descendants;
+		}
+		public Person GetFatherOnScene()
+		{
+			List<Person> people = GetParent<Main>().GetChildren().OfType<Person>().ToList();
+			Person father = people.Find(p => p.model.Id == model.FatherId);
+			return father;
+		}
+		public Person GetMotherOnScene()
+		{
+			List<Person> people = GetParent<Main>().GetChildren().OfType<Person>().ToList();
+			Person mother = people.Find(p => p.model.Id == model.MotherId);
+			return mother;
+		}
+		public Person GetSpouseOnScene()
+		{
+			List<Person> people = GetParent<Main>().GetChildren().OfType<Person>().ToList();
+			Person spouse = null;
+			if (model.Spouse != null)
+				spouse = people.Find(p => p.model.Id == model.Spouse?.model.Id);
+			return spouse;
+		}
 		public override void _Ready()
 		{
+			GetChild<Area2D>(1).Connect("mouse_entered", new Callable(this, "OnHover"));
+			GetChild<Area2D>(1).Connect("mouse_exited", new Callable(this, "OnLeft"));
 		}
 
 		// Called every frame. 'delta' is the elapsed time since the previous frame.

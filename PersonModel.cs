@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using MongoDB.Driver;
 using Godot;
+using System.Reflection.Metadata.Ecma335;
 namespace FamilyTree
 {
 	public class PersonModel
@@ -20,6 +21,7 @@ namespace FamilyTree
 		{
 			_source = source;
 		}
+		public bool HasSource() => _source != null;
 		[BsonId]
 		[BsonRepresentation(BsonType.ObjectId)]
 		public string Id { get; set; }
@@ -73,5 +75,46 @@ namespace FamilyTree
 				}
 				return Children;
 			} }
+		public List<Person> Spouses { get
+			{
+				List <PersonModel> models = new List<PersonModel>();
+				List<Person> Spouses = new List<Person>();
+				List<PersonModel> children = _source.Find(p => IsMale ? p.FatherId == Id : p.MotherId == Id).ToList();
+				foreach (var child in children)
+				{
+					if (models.Find(p => p.Id == (IsMale?child.MotherId:child.FatherId)) == null)
+					{
+						PersonModel spouse = _source.Find(p => p.Id == (IsMale ? child.MotherId : child.FatherId)).FirstOrDefaultAsync().Result;
+						if (spouse != null)
+						models.Add(spouse);
+					}
+				}
+				foreach(var model in models)
+				{
+					model.SetSource(_source);
+					Spouses.Add(new Person { model = model});
+				}
+				return Spouses;
+			} }
+		public Person Spouse
+		{
+			get
+			{
+				Person Spouse = null;
+				DateOnly maxdate = new DateOnly(1, 1, 1);
+				foreach(var spouse in Spouses)
+				{
+					foreach(var child in spouse.GetChildren())
+					{
+						if(child.model.BirthDate > maxdate)
+						{
+							Spouse = spouse;
+							maxdate = child.model.BirthDate;
+						}
+					}
+				}
+				return Spouse;
+			}
+		}
 	}
 }
